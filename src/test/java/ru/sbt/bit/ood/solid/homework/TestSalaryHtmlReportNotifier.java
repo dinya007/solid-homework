@@ -2,16 +2,18 @@ package ru.sbt.bit.ood.solid.homework;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.*;
-import static org.powermock.api.mockito.PowerMockito.whenNew;
-
 import org.mockito.ArgumentCaptor;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import ru.sbt.bit.ood.solid.homework.ReportDocument.ReportDocument;
+import ru.sbt.bit.ood.solid.homework.ReportDocument.impl.HtmlReportDocument;
+import ru.sbt.bit.ood.solid.homework.datasource.DataSource;
+import ru.sbt.bit.ood.solid.homework.datasource.impl.SqlDataSource;
+import ru.sbt.bit.ood.solid.homework.report.Report;
+import ru.sbt.bit.ood.solid.homework.resulthandler.ResultHandler;
+import ru.sbt.bit.ood.solid.homework.resulthandler.impl.MailResultHandler;
 
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
@@ -26,8 +28,12 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.Month;
 
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.*;
+import static org.powermock.api.mockito.PowerMockito.whenNew;
+
 @RunWith(PowerMockRunner.class)
-@PrepareForTest(SalaryHtmlReportNotifier.class)
+@PrepareForTest(MailResultHandler.class)
 public class TestSalaryHtmlReportNotifier {
 
     @Test
@@ -40,12 +46,16 @@ public class TestSalaryHtmlReportNotifier {
         // mock mail related stuff
         MimeMessageHelper mockMimeMessageHelper = getMockedMimeMessageHelper();
 
-        // set up parameters
-        SalaryHtmlReportNotifier notificator = new SalaryHtmlReportNotifier(someFakeConnection);
+
+//         set up parameters and execute
         LocalDate dateFrom = LocalDate.of(2014, Month.JANUARY, 1);
         LocalDate dateTo = LocalDate.of(2014, Month.DECEMBER, 31);
-        // execute
-        notificator.generateAndSendHtmlSalaryReport("10", dateFrom, dateTo, "somebody@gmail.com");
+        DataSource dataSource = new SqlDataSource(someFakeConnection);
+        Report salaryReport = dataSource.getSalaryReport("10", dateFrom, dateTo);
+        ReportDocument reportDocument = new HtmlReportDocument(salaryReport);
+        ResultHandler resultHandler = new MailResultHandler("Monthly department salary report", "somebody@gmail.com");
+        resultHandler.handleResult(reportDocument);
+
         // verify results
         String expectedReportPath = "src/test/resources/expectedReport.html";
         assertActualReportEqualsTo(mockMimeMessageHelper, expectedReportPath);
@@ -56,7 +66,7 @@ public class TestSalaryHtmlReportNotifier {
         verify(mockMimeMessageHelper).setText(messageTextArgumentCaptor.capture(), anyBoolean());
         Path path = Paths.get(expectedReportPath);
         String expectedReportContent = new String(Files.readAllBytes(path));
-        assertEquals(messageTextArgumentCaptor.getValue(), expectedReportContent);
+        assertEquals(expectedReportContent, messageTextArgumentCaptor.getValue());
     }
 
     private ResultSet getMockedResultSet(Connection someFakeConnection) throws SQLException {
@@ -74,7 +84,7 @@ public class TestSalaryHtmlReportNotifier {
         when(mockMailSender.createMimeMessage()).thenReturn(mockMimeMessage);
         whenNew(JavaMailSenderImpl.class).withNoArguments().thenReturn(mockMailSender);
         MimeMessageHelper mockMimeMessageHelper = mock(MimeMessageHelper.class);
-        whenNew(MimeMessageHelper.class).withArguments(any(), any()).thenReturn(mockMimeMessageHelper);
+        whenNew(MimeMessageHelper.class).withArguments(any(), anyBoolean()).thenReturn(mockMimeMessageHelper);
         return mockMimeMessageHelper;
     }
 
